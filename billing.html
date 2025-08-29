@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transport Billing Software</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase Libraries -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <!-- jsPDF and AutoTable for PDF Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.5.25/dist/jspdf.plugin.autotable.min.js"></script>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <script>
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("sw.js").then(() => {
+                console.log("Service Worker registered");
+            });
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 p-4 font-sans antialiased">
+    <div id="app-container" class="min-h-screen text-gray-800">
+
+        <div id="modal-container"></div>
+
+        <!-- Authentication UI -->
+        <div id="auth-container" class="min-h-screen flex items-center justify-center">
+            <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md">
+                <h2 class="text-2xl font-bold text-center mb-4 text-gray-900">Welcome</h2>
+                <div id="auth-message" class="text-sm text-red-500 text-center mb-4"></div>
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="login-email" name="email"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            required />
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="login-password" name="password"
+                            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            required />
+                    </div>
+                    <button type="submit" id="login-btn"
+                        class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow hover:bg-blue-700 transition-colors">
+                        Log In
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Main Application UI -->
+        <div id="main-app-ui" class="hidden">
+            <div class="container mx-auto max-w-4xl bg-white p-6 md:p-8 rounded-xl shadow-lg mb-8">
+                <h1 class="text-3xl font-bold text-center text-gray-900 mb-2">Transport Billing Software</h1>
+                <p class="text-center text-gray-600 mb-4">Create, calculate, and save transport invoices.</p>
+                <div id="user-info" class="text-sm text-center text-gray-500 mb-4"></div>
+                <div class="flex justify-end mt-4">
+                    <button id="sign-out-btn"
+                        class="bg-red-500 text-white text-sm font-bold py-1 px-4 rounded-lg shadow hover:bg-red-600 transition-colors">
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+
+            <div class="container mx-auto max-w-4xl flex flex-wrap justify-center gap-4 mb-8">
+                <button id="new-invoice-btn"
+                    class="w-full sm:w-auto bg-green-500 text-white font-bold py-2 px-6 rounded-lg shadow hover:bg-green-600 transition-colors">
+                    New Invoice
+                </button>
+                <button id="load-invoices-btn"
+                    class="w-full sm:w-auto bg-blue-500 text-white font-bold py-2 px-6 rounded-lg shadow hover:bg-blue-600 transition-colors">
+                    Load Saved Invoices
+                </button>
+            </div>
+
+            <div id="invoice-list-container"
+                class="container mx-auto max-w-4xl bg-white p-6 rounded-xl shadow-lg mb-8 hidden">
+                <h2 class="text-xl font-bold mb-4">Saved Invoices</h2>
+                <div id="invoices-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+
+            <div class="container mx-auto max-w-4xl bg-white p-6 md:p-8 rounded-xl shadow-lg">
+                <form id="invoice-form">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Invoice No.</label>
+                            <input type="text" id="invoiceNumber" name="invoiceNumber"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Date</label>
+                            <input type="date" id="date" name="date"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Eway Bill No.</label>
+                            <input type="text" id="ewayBillNo" name="ewayBillNo"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Mode of Transport</label>
+                            <input type="text" id="modeOfTransport" name="modeOfTransport"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Vehicle No.</label>
+                            <input type="text" id="vehicleNo" name="vehicleNo"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Delivery</label>
+                            <input type="text" id="delivery" name="delivery"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">LrNo.</label>
+                            <input type="text" id="lrNo" name="lrNo"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Place of Supply</label>
+                            <select id="placeOfSupply" name="placeOfSupply"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                                <option value="Intra-state">Intra-state (CGST + SGST)</option>
+                                <option value="Inter-state">Inter-state (IGST)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h3 class="font-bold text-lg mb-2">Company Details</h3>
+                            <label class="block text-sm font-medium text-gray-700">Company Name</label>
+                            <input type="text" id="companyName" name="companyName"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                            <label class="block text-sm font-medium text-gray-700 mt-2">Address</label>
+                            <textarea id="companyAddress" name="companyAddress" rows="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                            <label class="block text-sm font-medium text-gray-700 mt-2">GST No.</label>
+                            <input type="text" id="companyGST" name="companyGST"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                            <label class="block text-sm font-medium text-gray-700 mt-2">Contact No.</label>
+                            <input type="text" id="companyContact" name="companyContact"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <h3 class="font-bold text-lg mb-2">Client Details</h3>
+                            <div class="flex gap-2 items-center mb-2">
+                                <button type="button" id="add-client-btn"
+                                    class="bg-purple-500 text-white text-sm font-bold py-1 px-4 rounded-md shadow hover:bg-purple-600 transition-colors">
+                                    Add Client
+                                </button>
+                                <button type="button" id="load-clients-btn"
+                                    class="bg-indigo-500 text-white text-sm font-bold py-1 px-4 rounded-md shadow hover:bg-indigo-600 transition-colors">
+                                    Load Clients
+                                </button>
+                            </div>
+                            <div id="clients-list-container" class="mb-4 max-h-40 overflow-y-auto hidden">
+                                <ul id="clients-list" class="space-y-1"></ul>
+                            </div>
+                            <label class="block text-sm font-medium text-gray-700">Client Name</label>
+                            <input type="text" id="clientName" name="clientName"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                            <label class="block text-sm font-medium text-gray-700 mt-2">Address</label>
+                            <textarea id="clientAddress" name="clientAddress" rows="3"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"></textarea>
+                            <label class="block text-sm font-medium text-gray-700 mt-2">GST No.</label>
+                            <input type="text" id="clientGST" name="clientGST"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                            <label class="block text-sm font-medium text-gray-700 mt-2">Contact No.</label>
+                            <input type="text" id="clientContact" name="clientContact"
+                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                        </div>
+                    </div>
+
+                    <div class="mb-8">
+                        <h3 class="font-bold text-lg mb-4">Item Details</h3>
+                        <button type="button" id="add-item-btn"
+                            class="mb-4 bg-gray-200 text-gray-700 py-1 px-3 rounded-md text-sm font-semibold hover:bg-gray-300 transition-colors">
+                            + Add Item
+                        </button>
+                        <div id="items-container"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                        <div>
+                            <button type="button" id="calculate-btn"
+                                class="w-full bg-yellow-500 text-white font-bold py-2 px-6 rounded-lg shadow hover:bg-yellow-600 transition-colors">
+                                Calculate Totals
+                            </button>
+                        </div>
+                        <div class="text-right bg-gray-50 p-4 rounded-lg">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold">Taxable Value:</span>
+                                <span id="taxable-value">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold">SGST 2.5%:</span>
+                                <span id="sgst">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold">CGST 2.5%:</span>
+                                <span id="cgst">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold">IGST 5%:</span>
+                                <span id="igst">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="font-semibold">Cess (₹400/ton):</span>
+                                <span id="cess">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center font-bold text-lg border-t pt-2 mt-2">
+                                <span>Sub Total:</span>
+                                <span id="sub-total">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-1">
+                                <span class="font-semibold">TCS 0.75%:</span>
+                                <span id="tcs">₹0.00</span>
+                            </div>
+                            <div class="flex justify-between items-center font-bold text-xl border-t pt-2 mt-2">
+                                <span>Grand Total:</span>
+                                <span id="grand-total">₹0.00</span>
+                            </div>
+                            <div class="mt-2 text-sm text-gray-600">
+                                <span class="font-semibold">Total in words:</span> <span id="total-in-words"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-8 bg-gray-50 p-4 rounded-lg">
+                        <h3 class="font-bold text-lg mb-2">Terms and Conditions</h3>
+                        <ul id="terms-list" class="list-disc list-inside text-sm text-gray-600"></ul>
+                    </div>
+
+                    <div class="flex justify-center gap-4">
+                        <button type="submit" id="save-invoice-btn"
+                            class="w-full md:w-auto bg-green-600 text-white font-bold py-3 px-12 rounded-lg shadow-lg hover:bg-green-700 transition-colors disabled:bg-gray-400">
+                            Save Invoice
+                        </button>
+                        <button type="button" id="pdf-btn"
+                            class="w-full md:w-auto bg-red-600 text-white font-bold py-3 px-12 rounded-lg shadow-lg hover:bg-red-700 transition-colors">
+                            Generate PDF
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const defaultInvoice = {
+            invoiceNumber: '',
+            date: new Date().toISOString().slice(0, 10),
+            ewayBillNo: '',
+            modeOfTransport: '        BY ROAD',
+            vehicleNo: '',
+            delivery: '',
+            batchNo: '',
+            lrNo: '',
+            placeOfSupply: 'Intra-state',
+            companyName: 'Jai Mata Di Services',
+            companyAddress: 'Ward No.5, H.No. 568/44, Santaji Nagar, Kandri, Kanhan Nagpur-441401',
+            companyGST: '27ACJPA4793K1Z9',
+            companyContact: '',
+            companyEmail: 'Jaimatadiservices2019@gmail.com',
+            clientName: '',
+            clientAddress: '',
+            clientGST: '',
+            clientContact: '',
+            items: [{ description: '', hsn: '', quantity: '0', unit: '', ratePerTon: '0' }],
+            taxableValue: 0,
+            sgst: 0,
+            cgst: 0,
+            igst: 0,
+            cess: 0,
+            subTotal: 0,
+            tcs: 0,
+            grandTotal: 0,
+            totalInWords: '',
+            terms: [
+                'Goods once sold will not be taken back.',
+                'Interest will be charged 24% per anum after due date.',
+                'All disputes are subject to Nagpur Jurisdiction.',
+            ],
+        };
+
+        let invoice = { ...defaultInvoice };
+        let invoices = [];
+        let clients = [];
+        let db, auth;
+        let userId = null;
+        let authStateListenerUnsubscribe = null;
+        let invoicesListenerUnsubscribe = null;
+        let clientsListenerUnsubscribe = null;
+
+        const showModal = (msg) => {
+            const modalContainer = document.getElementById('modal-container');
+            modalContainer.innerHTML = `
+          <div class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+            <div class="bg-white p-6 rounded-xl shadow-lg m-4 max-w-sm w-full">
+              <div class="text-center">
+                <h3 class="text-lg font-semibold leading-6 text-gray-900">Notification</h3>
+                <div class="mt-2">
+                  <p class="text-sm text-gray-500">${msg}</p>
+                </div>
+                <div class="mt-4">
+                  <button type="button" class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700" onclick="closeModal()">Close</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+        };
+
+        window.closeModal = () => {
+            const modalContainer = document.getElementById('modal-container');
+            modalContainer.innerHTML = '';
+        };
+
+        const numberToWords = (value) => {
+            const a = ['', 'One ', 'Two ', 'Three ', 'Four ', 'Five ', 'Six ', 'Seven ', 'Eight ', 'Nine ', 'Ten ', 'Eleven ', 'Twelve ', 'Thirteen ', 'Fourteen ', 'Fifteen ', 'Sixteen ', 'Seventeen ', 'Eighteen ', 'Nineteen '];
+            const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+            const convertToWords = (n) => {
+                let str = '';
+                if (n <= 19) {
+                    str += a[n];
+                } else {
+                    str += b[Math.floor(n / 10)] + ' ' + a[n % 10];
+                }
+                return str;
+            };
+            const inWords = (num) => {
+                let words = '';
+                if ((num = num.toString()).length > 9) return 'overflow';
+                let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+                if (!n) return '';
+                words += (n[1] !== '0') ? (convertToWords(Number(n[1])) || '') + 'Crore ' : '';
+                words += (n[2] !== '0') ? (convertToWords(Number(n[2])) || '') + 'Lakh ' : '';
+                words += (n[3] !== '0') ? (convertToWords(Number(n[3])) || '') + 'Thousand ' : '';
+                words += (n[4] !== '0') ? (convertToWords(Number(n[4])) || '') + 'Hundred ' : '';
+                words += (n[5] !== '0') ? (convertToWords(Number(n[5])) || '') + ' ' : '';
+                words += 'RUPEES ONLY.';
+                return words;
+            };
+            const num = Math.floor(Number(value));
+            const words = inWords(num).trim();
+            return words.replace(/\s\s+/g, ' ');
+        };
+
+        const renderForm = () => {
+            document.getElementById('invoiceNumber').value = invoice.invoiceNumber;
+            document.getElementById('date').value = invoice.date;
+            document.getElementById('ewayBillNo').value = invoice.ewayBillNo;
+            document.getElementById('modeOfTransport').value = invoice.modeOfTransport;
+            document.getElementById('vehicleNo').value = invoice.vehicleNo;
+            document.getElementById('delivery').value = invoice.delivery;
+            document.getElementById('lrNo').value = invoice.lrNo;
+            document.getElementById('placeOfSupply').value = invoice.placeOfSupply;
+            document.getElementById('companyName').value = invoice.companyName;
+            document.getElementById('companyAddress').value = invoice.companyAddress;
+            document.getElementById('companyGST').value = invoice.companyGST;
+            document.getElementById('companyContact').value = invoice.companyContact;
+            document.getElementById('clientName').value = invoice.clientName;
+            document.getElementById('clientAddress').value = invoice.clientAddress;
+            document.getElementById('clientGST').value = invoice.clientGST;
+            document.getElementById('clientContact').value = invoice.clientContact;
+
+            renderItems();
+            calculateTotals();
+        };
+
+        const renderItems = () => {
+            const itemsContainer = document.getElementById('items-container');
+            itemsContainer.innerHTML = '';
+            invoice.items.forEach((item, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'grid grid-cols-1 md:grid-cols-7 gap-4 items-end mb-4 p-4 border rounded-lg bg-gray-50';
+                itemEl.innerHTML = `
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700">Description</label>
+                    <input type="text" name="description" value="${item.description}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">HSN</label>
+                    <input type="text" name="hsn" value="${item.hsn}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Qty</label>
+                    <input type="number" step="0.01" name="quantity" value="${item.quantity}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Unit</label>
+                    <input type="text" name="unit" value="${item.unit}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Rate</label>
+                    <input type="number" step="0.01" name="ratePerTon" value="${item.ratePerTon}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                </div>
+                <div>
+                    <button type="button" class="w-full bg-red-500 text-white font-bold py-2 px-3 rounded-md shadow hover:bg-red-600 transition-colors remove-item-btn">
+                        Remove
+                    </button>
+                </div>
+            `;
+                itemEl.querySelector('.remove-item-btn').addEventListener('click', () => {
+                    invoice.items.splice(index, 1);
+                    renderForm();
+                });
+                itemEl.querySelectorAll('input').forEach(input => {
+                    input.addEventListener('change', (e) => {
+                        invoice.items[index][e.target.name] = e.target.value;
+                        calculateTotals();
+                    });
+                });
+                itemsContainer.appendChild(itemEl);
+            });
+        };
+
+        const updateTotalsDisplay = () => {
+            document.getElementById('taxable-value').textContent = `₹${invoice.taxableValue.toFixed(2)}`;
+            document.getElementById('sgst').textContent = `₹${invoice.sgst.toFixed(2)}`;
+            document.getElementById('cgst').textContent = `₹${invoice.cgst.toFixed(2)}`;
+            document.getElementById('igst').textContent = `₹${invoice.igst.toFixed(2)}`;
+            document.getElementById('cess').textContent = `₹${invoice.cess.toFixed(2)}`;
+            document.getElementById('sub-total').textContent = `₹${invoice.subTotal.toFixed(2)}`;
+            document.getElementById('tcs').textContent = `₹${invoice.tcs.toFixed(2)}`;
+            document.getElementById('grand-total').textContent = `₹${invoice.grandTotal.toFixed(2)}`;
+            document.getElementById('total-in-words').textContent = invoice.totalInWords;
+
+            document.getElementById('terms-list').innerHTML = invoice.terms.map(term => `<li>${term}</li>`).join('');
+        };
+
+        const initFirebase = async () => {
+            try {
+                const firebaseConfig = {
+                    apiKey: "AIzaSyBfF3TiKEawoXcaOazbObLXMo4qDw5U2wM",
+                    authDomain: "jaimatadi-20253.firebaseapp.com",
+                    projectId: "jaimatadi-20253",
+                    storageBucket: "jaimatadi-20253.firebasestorage.app",
+                    messagingSenderId: "992943391504",
+                    appId: "1:992943391504:web:34ff80722f7eeb12aa5b95",
+                    measurementId: "G-GGGZ5JRHF5"
+                };
+
+                const app = firebase.initializeApp(firebaseConfig);
+                db = app.firestore();
+                auth = app.auth();
+
+                authStateListenerUnsubscribe = auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('auth-container').classList.add('hidden');
+                        document.getElementById('main-app-ui').classList.remove('hidden');
+                        document.getElementById('user-info').textContent = `User ID: ${userId}`;
+                        renderForm();
+
+                        invoicesListenerUnsubscribe = db.collection(`artifacts/${userId}/users/${userId}/invoices`).onSnapshot(snapshot => {
+                            invoices = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            renderInvoicesList();
+                        });
+                        clientsListenerUnsubscribe = db.collection(`artifacts/${userId}/users/${userId}/clients`).onSnapshot(snapshot => {
+                            clients = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                            renderClientsList();
+                        });
+                    } else {
+                        userId = null;
+                        document.getElementById('auth-container').classList.remove('hidden');
+                        document.getElementById('main-app-ui').classList.add('hidden');
+                        if (invoicesListenerUnsubscribe) invoicesListenerUnsubscribe();
+                        if (clientsListenerUnsubscribe) clientsListenerUnsubscribe();
+                    }
+                });
+            } catch (e) {
+                console.error("Error initializing Firebase:", e);
+                showModal("Error initializing the application. Check your Firebase config and security rules.");
+            }
+        };
+
+        const calculateTotals = () => {
+            let totalTaxableValue = 0;
+            let totalCess = 0;
+
+            invoice.items.forEach(item => {
+                const qty = parseFloat(item.quantity) || 0;
+                const rate = parseFloat(item.ratePerTon) || 0;
+                const taxableValue = qty * rate;
+                const cess = qty * 400;
+
+                totalTaxableValue += taxableValue;
+                totalCess += cess;
+            });
+
+            let totalSgst = 0;
+            let totalCgst = 0;
+            let totalIgst = 0;
+
+            if (invoice.placeOfSupply === 'Intra-state') {
+                totalSgst = totalTaxableValue * 0.025;
+                totalCgst = totalTaxableValue * 0.025;
+            } else {
+                totalIgst = totalTaxableValue * 0.05;
+            }
+
+            invoice = {
+                ...invoice,
+                taxableValue: totalTaxableValue,
+                sgst: totalSgst,
+                cgst: totalCgst,
+                igst: totalIgst,
+                cess: totalCess,
+                subTotal: totalTaxableValue + totalSgst + totalCgst + totalIgst + totalCess,
+                tcs: (totalTaxableValue + totalSgst + totalCgst + totalIgst + totalCess) * 0.0075,
+                grandTotal: (totalTaxableValue + totalSgst + totalCgst + totalIgst + totalCess) + (totalTaxableValue + totalSgst + totalCgst + totalIgst + totalCess) * 0.0075,
+            };
+            invoice.totalInWords = numberToWords(invoice.grandTotal);
+            updateTotalsDisplay();
+        };
+
+        const generatePDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            const addText = (text, x, y, options = {}) => {
+                doc.text(text, x, y, options);
+                return y + (options.lineHeight || 7);
+            };
+
+            const drawInvoice = () => {
+                let y = 10;
+                const margin = 10;
+                const pageWidth = doc.internal.pageSize.getWidth();
+                const boxWidth = pageWidth - 2 * margin;
+                doc.setFontSize(22);
+                doc.text("TAX INVOICE", pageWidth / 2, 20, { align: 'center' });
+                y = 25;
+
+                // Box for company details
+                doc.rect(margin, y, (pageWidth / 2) - margin, 40);
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(invoice.companyName, margin + 2, y + 5);
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(10);
+                const companyAddressLines = doc.splitTextToSize(invoice.companyAddress, 80);
+                let companyAddressY = y + 10;
+                companyAddressLines.forEach(line => {
+                    doc.text(line, margin + 2, companyAddressY);
+                    companyAddressY += 5;
+                });
+                doc.text(`GST No: ${invoice.companyGST}`, margin + 2, companyAddressY + 5);
+                doc.text(`Email: ${invoice.companyEmail}`, margin + 2, companyAddressY + 10);
+
+                // Box for client details
+                doc.rect(pageWidth / 2, y, (pageWidth / 2) - margin, 40);
+                doc.setFontSize(14);
+                doc.setFont("helvetica", "bold");
+                doc.text(`To,`, pageWidth / 2 + 2, y + 5);
+                doc.text(`${invoice.clientName}`, pageWidth / 2 + 2, y + 10);
+                doc.setFont("helvetica", "normal");
+                doc.setFontSize(10);
+                const clientAddressLines = doc.splitTextToSize(invoice.clientAddress, 80);
+                let clientAddressY = y + 15;
+                clientAddressLines.forEach(line => {
+                    doc.text(line, pageWidth / 2 + 2, clientAddressY);
+                    clientAddressY += 5;
+                });
+                doc.text(`GST No: ${invoice.clientGST}`, pageWidth / 2 + 2, clientAddressY + 5);
+
+                y += 45;
+
+                // Box for invoice details
+                doc.rect(margin, y, boxWidth, 20);
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.text("Invoice No.", margin + 2, y + 5);
+                doc.text("Date:", pageWidth / 2 + 2, y + 5);
+                doc.text("Eway Bill No.:", margin + 2, y + 10);
+                doc.text("Mode of Transport:", pageWidth / 2 + 2, y + 10);
+                doc.text("Vehicle No.:", margin + 2, y + 15);
+                doc.text("Delivery:", pageWidth / 2 + 2, y + 15);
+                doc.text("LR No.:", margin + 2, y + 20);
+
+                doc.setFont("helvetica", "normal");
+                doc.text(invoice.invoiceNumber, margin + 30, y + 5);
+                doc.text(invoice.date, pageWidth / 2 + 30, y + 5);
+                doc.text(invoice.ewayBillNo, margin + 30, y + 10);
+                doc.text(invoice.modeOfTransport, pageWidth / 2 + 30, y + 10);
+                doc.text(invoice.vehicleNo, margin + 30, y + 15);
+                doc.text(invoice.delivery, pageWidth / 2 + 30, y + 15);
+                doc.text(invoice.lrNo, margin + 30, y + 20);
+
+                y += 25;
+
+                // Item Details Table
+                const headers = ["Sr. N", "Item Description", "HSN", "Qty", "Unit", "Rate Per Ton", "Taxable Value"];
+                const tableRows = invoice.items.map((item, index) => [
+                    index + 1,
+                    item.description,
+                    item.hsn,
+                    item.quantity,
+                    item.unit,
+                    item.ratePerTon,
+                    (parseFloat(item.quantity) * parseFloat(item.ratePerTon)).toFixed(2)
+                ]);
+
+                doc.autoTable({
+                    startY: y,
+                    head: [headers],
+                    body: tableRows,
+                    theme: 'grid',
+                    styles: { fontSize: 8, cellPadding: 2, halign: 'center' },
+                    headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0], fontStyle: 'bold' },
+                    columnStyles: {
+                        0: { halign: 'left', cellWidth: 15 },
+                        1: { halign: 'left', cellWidth: 50 },
+                        2: { cellWidth: 20 },
+                        3: { cellWidth: 20 },
+                        4: { cellWidth: 15 },
+                        5: { cellWidth: 25 },
+                        6: { cellWidth: 25 },
+                    }
+                });
+                y = doc.autoTable.previous.finalY + 5;
+
+                // Totals and Terms Box
+                doc.rect(margin, y, boxWidth, 60);
+
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "normal");
+
+                let rupeesY = y + 5;
+                const totalInWordsLines = doc.splitTextToSize("Rupees: " + invoice.totalInWords, boxWidth / 2 - 5);
+                totalInWordsLines.forEach(line => {
+                    doc.text(line, margin + 2, rupeesY);
+                    rupeesY += 5;
+                });
+
+                let termsY = y + 20;
+                doc.text("Terms and Conditions:", margin + 2, termsY);
+                doc.setFontSize(8);
+                termsY += 5;
+                invoice.terms.forEach((term, index) => {
+                    const termLines = doc.splitTextToSize(`${index + 1}. ${term}`, boxWidth / 2 - 10);
+                    termLines.forEach(line => {
+                        doc.text(line, margin + 5, termsY);
+                        termsY += 4;
+                    });
+                });
+
+                const totalsX = pageWidth - margin - 40;
+                let totalsY = y + 5;
+                doc.setFontSize(10);
+
+                const totalsData = [
+                    { label: 'Taxable Value:', value: invoice.taxableValue },
+                    { label: 'SGST 2.5% Amt:', value: invoice.sgst },
+                    { label: 'CGST 2.5% Amt:', value: invoice.cgst },
+                    { label: 'IGST 5% Amt:', value: invoice.igst },
+                    { label: 'Cess 400 Per Ton:', value: invoice.cess },
+                    { label: 'Sub Total:', value: invoice.subTotal },
+                    { label: 'TCS 0.75%:', value: invoice.tcs },
+                    { label: 'Grand Total:', value: invoice.grandTotal },
+                ];
+
+                totalsData.forEach(item => {
+                    doc.setFont("helvetica", item.label === 'Grand Total:' ? 'bold' : 'normal');
+                    doc.text(item.label, totalsX, totalsY, { align: 'right' });
+                    doc.text(`₹${item.value.toFixed(2)}`, pageWidth - margin, totalsY, { align: 'right' });
+                    totalsY += 7;
+                });
+
+                doc.setFontSize(10);
+                doc.setFont("helvetica", "bold");
+                doc.text("", pageWidth - margin, y + 40, { align: 'right' });
+                doc.setFont("helvetica", "normal");
+                doc.text("", pageWidth - margin, y + 55, { align: 'right' });
+
+                doc.save(`Invoice_${invoice.invoiceNumber}.pdf`);
+                showModal("PDF generated successfully!");
+            };
+            drawInvoice();
+        };
+
+        const handleFormChange = (e) => {
+            const { id, value } = e.target;
+            invoice[id] = value;
+            calculateTotals();
+        };
+
+        const handleItemChange = (index, e) => {
+            const { name, value } = e.target;
+            invoice.items[index][name] = value;
+            calculateTotals();
+        };
+
+        const handleAddItem = () => {
+            invoice.items.push({ description: '', hsn: '', quantity: '0', unit: '', ratePerTon: '0' });
+            renderForm();
+        };
+
+        const handleRemoveItem = (index) => {
+            invoice.items.splice(index, 1);
+            renderForm();
+        };
+
+        const handleSaveInvoice = async (e) => {
+            e.preventDefault();
+            if (!db || !userId) {
+                showModal("Application not ready. Please wait a moment.");
+                return;
+            }
+
+            calculateTotals();
+            document.getElementById('save-invoice-btn').disabled = true;
+
+            try {
+                await db.collection(`artifacts/${userId}/users/${userId}/invoices`).add({ ...invoice, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                showModal("Invoice saved successfully!");
+            } catch (e) {
+                console.error("Error saving invoice: ", e);
+                showModal("Failed to save invoice. Please try again.");
+            } finally {
+                document.getElementById('save-invoice-btn').disabled = false;
+            }
+        };
+
+        const handleLoadInvoice = async (invoiceId) => {
+            if (!db || !userId) return;
+            try {
+                const docSnap = await db.collection(`artifacts/${userId}/users/${userId}/invoices`).doc(invoiceId).get();
+                if (docSnap.exists) {
+                    invoice = docSnap.data();
+                    renderForm();
+                    document.getElementById('invoice-list-container').classList.add('hidden');
+                    showModal("Invoice loaded successfully!");
+                } else {
+                    showModal("Invoice not found.");
+                }
+            } catch (e) {
+                console.error("Error loading invoice:", e);
+                showModal("Failed to load invoice. Please try again.");
+            }
+        };
+
+        const handleNewInvoice = () => {
+            invoice = { ...defaultInvoice };
+            renderForm();
+            document.getElementById('invoice-list-container').classList.add('hidden');
+            showModal("New invoice form cleared.");
+        };
+
+        const renderInvoicesList = () => {
+            const invoicesListEl = document.getElementById('invoices-list');
+            invoicesListEl.innerHTML = '';
+            if (invoices.length === 0) {
+                invoicesListEl.innerHTML = '<p class="text-gray-500">No saved invoices found.</p>';
+                return;
+            }
+            invoices.forEach(inv => {
+                const li = document.createElement('li');
+                li.className = 'bg-gray-50 p-4 rounded-lg flex justify-between items-center shadow-sm';
+                li.innerHTML = `
+                <div>
+                    <div class="font-semibold">${inv.clientName}</div>
+                    <div class="text-sm text-gray-500">Invoice No: ${inv.invoiceNumber}</div>
+                    <div class="text-sm text-gray-500">Date: ${inv.date}</div>
+                </div>
+                <button class="bg-purple-500 text-white text-sm font-bold py-1 px-4 rounded-md shadow hover:bg-purple-600 transition-colors load-invoice-btn">
+                    Load
+                </button>
+            `;
+                li.querySelector('.load-invoice-btn').addEventListener('click', () => handleLoadInvoice(inv.id));
+                invoicesListEl.appendChild(li);
+            });
+        };
+
+        const renderClientsList = () => {
+            const clientsListEl = document.getElementById('clients-list');
+            clientsListEl.innerHTML = '';
+            if (clients.length === 0) {
+                clientsListEl.innerHTML = '<p class="text-sm text-gray-500">No saved clients.</p>';
+                return;
+            }
+            clients.forEach(client => {
+                const li = document.createElement('li');
+                li.className = 'p-2 border rounded-md text-sm cursor-pointer hover:bg-gray-100';
+                li.textContent = client.name;
+                li.addEventListener('click', () => {
+                    invoice.clientName = client.name;
+                    invoice.clientAddress = client.address;
+                    invoice.clientGST = client.gst;
+                    invoice.clientContact = client.contact;
+                    renderForm();
+                    document.getElementById('clients-list-container').classList.add('hidden');
+                    showModal("Client details loaded.");
+                });
+                clientsListEl.appendChild(li);
+            });
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initFirebase();
+            document.getElementById('invoice-form').addEventListener('change', (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                    invoice[e.target.id] = e.target.value;
+                }
+            });
+            document.getElementById('add-item-btn').addEventListener('click', handleAddItem);
+            document.getElementById('calculate-btn').addEventListener('click', calculateTotals);
+            document.getElementById('save-invoice-btn').addEventListener('click', handleSaveInvoice);
+            document.getElementById('pdf-btn').addEventListener('click', generatePDF);
+            document.getElementById('new-invoice-btn').addEventListener('click', handleNewInvoice);
+            document.getElementById('load-invoices-btn').addEventListener('click', () => {
+                const container = document.getElementById('invoice-list-container');
+                container.classList.toggle('hidden');
+            });
+            document.getElementById('load-clients-btn').addEventListener('click', () => {
+                const container = document.getElementById('clients-list-container');
+                container.classList.toggle('hidden');
+            });
+        });
+
+        // --- Authentication UI Logic ---
+        const authContainer = document.getElementById('auth-container');
+        const mainAppUI = document.getElementById('main-app-ui');
+        const authMessage = document.getElementById('auth-message');
+        const loginForm = document.getElementById('login-form');
+        const loginEmailInput = document.getElementById('login-email');
+        const loginPasswordInput = document.getElementById('login-password');
+        const signOutBtn = document.getElementById('sign-out-btn');
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            authMessage.textContent = '';
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch (error) {
+                authMessage.textContent = "Invalid email or password.";
+                console.error("Auth error:", error);
+            }
+        });
+
+        signOutBtn.addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+                showModal("You have been signed out.");
+            } catch (error) {
+                console.error("Sign out error:", error);
+                showModal("Failed to sign out. Please try again.");
+            }
+        });
+    </script>
+</body>
+
+</html>
